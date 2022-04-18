@@ -3,15 +3,15 @@ import * as cardServices from "../services/cardServices.js";
 import * as rechargeRepository from "../repositories/rechargeRepository.js";
 
 export async function rechargeCard(req: Request, res: Response) {
-  const { cardId, recharge } = req.body;
+  const { cardId, amount } = req.body;
 
-  const card = await cardServices.verifyCard(cardId);
+  await cardServices.verifyCard(cardId);
 
-  if(recharge <= 0) throw { type: 'Unauthorized', message: 'The value entered is not valid' };
+  if(amount <= 0) throw { type: 'Unauthorized', message: 'The value entered is not valid' };
 
   await rechargeRepository.insert({
     cardId,
-    amount: recharge
+    amount
   });
 
   res.sendStatus(201);
