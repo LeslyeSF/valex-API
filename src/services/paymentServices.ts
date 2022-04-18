@@ -1,6 +1,7 @@
 import * as businessRepository from "../repositories/businessRepository.js";
+import {  balanceCard } from "./cardServices.js";
 
-export default async function verifyBusiness(businessId: number, cardType: string) {
+export async function verifyBusiness(businessId: number, cardType: string) {
   const business = await businessRepository.findById(businessId);
   
   if(!business) throw { type: 'Not found', message: 'This company is not registered' };  
@@ -8,3 +9,10 @@ export default async function verifyBusiness(businessId: number, cardType: strin
   
   return business;
 }
+
+export async function verifyBalance(cardId: number, amount: number) {
+  const { balance } = await balanceCard(cardId);
+
+  if (balance < amount) throw { type: 'Unauthorized', message: 'Insufficient balance' };
+}
+
