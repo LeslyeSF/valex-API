@@ -11,3 +11,4 @@ export default async function verifyApiKeyMiddleware(req: Request, res: Response
   res.locals.company = company;
   next();
 }
+
