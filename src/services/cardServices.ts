@@ -15,11 +15,9 @@ export function verifyCardType(cardType: string){
   
 }
 
-export async function createNewCard(employee: any, cardType: cardRepository.TransactionTypes){ 
-  const findCard = await cardRepository.findByTypeAndEmployeeId( cardType, employee.id );
-  if(findCard) throw { type: 'Conflict', message: 'The employee already has a card' };
-  
-  
+export async function createNewCard(employee: any, cardType: cardRepository.TransactionTypes){   
+  await findCard(cardType, employee.id);
+
   const number = await generateCardNumber();
   
   const cardholderName = generateCardholderName(employee.fullName);
@@ -53,6 +51,39 @@ export async function createNewCard(employee: any, cardType: cardRepository.Tran
 
 }
 
+export async function createNewCardOnline(card: cardRepository.Card){ 
+  await findOnlineCard(card.employeeId);
+
+  const number = await generateCardNumber();
+
+  const expirationDate = generateExpirationDate();
+
+  const securityCode = generateSecurityCode();
+
+  const CVC = securityCode;
+  
+  const cardDate = {
+    employeeId: card.employeeId,
+    number,
+    cardholderName: card.cardholderName,
+    securityCode: bcrypt.hashSync(securityCode, 5),
+    expirationDate,
+    password: card.password,
+    isVirtual: true,
+    originalCardId: card.id,
+    isBlocked: true,
+    type: card.type
+  };
+  
+  await cardRepository.insert(cardDate);
+  delete cardDate.securityCode;
+  return {
+    ...cardDate,
+    CVC
+  };
+
+}
+
 export async function verifyEmployeeCompany(employeeId: number, companyId: number) {
   const employee = await employeeRepository.findById(employeeId);
   if(!employee) throw { type: 'not found', message: 'Employee not found' };
@@ -71,6 +102,25 @@ export async function verifyCardCVC(employeeId: number, cardId: number, CVC: str
   return card;
 }
 
+export async function verifyCardForOnlinePayment(
+  number: string, 
+  cardholderName: string,
+  expirationDate: string,
+  CVC: string) {
+  const card = await cardRepository.findByCardDetails(
+    number,
+    cardholderName,
+    expirationDate
+  );
+  
+  if(!card) throw { type: 'Not found', message: 'The card was not found' };
+  if (!(bcrypt.compareSync(CVC, card.securityCode))) throw { type: 'Unauthorized', message: 'The CVC is wrong' };
+  if(dayjs().format('MM/YYYY') > card.expirationDate) throw { type: 'Bad request', message: 'The card is expired' };
+  if (card.isBlocked) throw { type: 'Unauthorized', message: 'The card is blocked' };
+
+  return card;
+}
+
 export async function verifyCard(cardId: number) {
   const card = await cardRepository.findById(cardId);
   
@@ -80,9 +130,33 @@ export async function verifyCard(cardId: number) {
   return card;
 }
 
+export async function verifyCardForBlocking(cardId: number, password: string) {
+  const card = await verifyCard(cardId);
+  if (card.isBlocked) throw { type: 'Bad request', message: 'The card is already blocked' };
+  if(!(bcrypt.compareSync(password, card.password))) throw { type: 'Unauthorized', message: 'The password is wrong' };
+}
+
+export async function verifyCardForUnblocking(cardId: number, password: string) {
+  const card = await verifyCard(cardId);
+  if (!card.isBlocked) throw { type: 'Bad request', message: 'The card is already unblocked' };
+  if(!(bcrypt.compareSync(password, card.password))) throw { type: 'Unauthorized', message: 'The password is wrong' };
+}
+
+export async function blockCard(cardId: number) {
+  await cardRepository.update(cardId, 
+    {
+      isBlocked: true
+    }); 
+}
+
+export async function unblockCard(cardId: number) {
+  await cardRepository.update(cardId, 
+    {
+      isBlocked: false
+    }); 
+}
 export function validatePassword(password: string){
   if(password.length !== 4) throw { type: 'Bad request', message: 'Password does not have four digits' };
-  //verificar se sao so numeros
 }
 
 export async function activateCardEmployee(cardId: number, password: string) {
@@ -98,11 +172,14 @@ export async function verifyPassword(cardId: number, password: string) {
   const card = await cardRepository.findById(cardId);
 
   if(!(bcrypt.compareSync(password, card.password))) throw { type: 'Unauthorized', message: 'The password is wrong' };
+
+  return card;
 }
 
 export async function verifyCardForPayment(id: number, password: string) {
   const card = await verifyCard(id);
   
+  if (card.isBlocked) throw { type: 'Unauthorized', message: 'The card is blocked' };
   if(!(bcrypt.compareSync(password, card.password))) throw { type: 'Unauthorized', message: 'The password is wrong' };
 
   return card;
@@ -181,4 +258,14 @@ function generateExpirationDate(): string {
 function generateSecurityCode(): string{
   const CVC = faker.finance.creditCardCVV();  
   return `${CVC}`;
+}
+async function findCard(cardType: cardRepository.TransactionTypes, employeeId: number) {
+  const card = await cardRepository.findByTypeAndEmployeeId( cardType, employeeId);
+  if(card) throw { type: 'Conflict', message: 'The employee already has a card' };
+}
+async function findOnlineCard(employeeId: number){
+  const findCard = (await cardRepository.find()).filter((data) => 
+  data.employeeId === employeeId && data.isVirtual
+  );
+  if(findCard.length !== 0) throw { type: 'Conflict', message: 'The employee already has a online card' };
 }
