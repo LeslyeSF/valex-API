@@ -32,5 +32,8 @@ export async function transactionsCard(req: Request, res: Response) {
 
   cardServices.verifyPassword(cardId, password);
 
+  const cardDates = await cardServices.balanceCard(cardId);
+
+  res.status(200).send(cardDates);
   
 }

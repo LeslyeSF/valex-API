@@ -1,5 +1,7 @@
 import * as employeeRepository from "../repositories/employeeRepository.js";
 import * as cardRepository from "../repositories/cardRepository.js";
+import * as paymentRepository from "../repositories/paymentRepository.js";
+import * as rechargeRepository from "../repositories/rechargeRepository.js";
 import { faker } from "@faker-js/faker";
 import dayjs from "dayjs";
 import bcrypt from "bcrypt";
@@ -104,6 +106,33 @@ export async function verifyCardForPayment(id: number, password: string) {
   if(!(bcrypt.compareSync(password, card.password))) throw { type: 'Unauthorized', message: 'The password is wrong' };
 
   return card;
+}
+
+export async function balanceCard(cardId: number) {
+  const payments = await paymentRepository.findByCardId(cardId);
+  const recharges = await rechargeRepository.findByCardId(cardId);
+  
+  const balance = sumAmounts(payments, recharges);
+
+  return {
+    balance,
+    transactions: payments,
+    recharges
+  };
+}
+
+function sumAmounts(payments: paymentRepository.PaymentWithBusinessName[], recharges: rechargeRepository.Recharge[]){
+  const paymentsAmount = payments.map((data)=> data.amount);
+  const rechargesAmount = recharges.map((data)=> data.amount);
+
+  const paymentsTotal = paymentsAmount.reduce(
+    (paymentsTotal, amount) => paymentsTotal + amount
+    , 0);
+  const rechargesTotal = rechargesAmount.reduce(
+    (rechargesTotal, amount) => rechargesTotal + amount
+    , 0);
+
+  return rechargesTotal - paymentsTotal;
 }
 
 async function generateCardNumber(){
